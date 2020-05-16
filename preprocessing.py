@@ -59,9 +59,13 @@ def Frame_Extractor(v_file, path='./', ext='.avi', frames_dir='train_1', extract
     frameRate = cap.get(5) #frame rate
     f_counter=0
     f_list = []
+    if '.' in v_file:
+        v_name = v_file.split('.')[0]
+    else:
+        v_name = vfile
 
     #duration = int(cap.get(7)/frameRate)
-    os.makedirs(frames_dir+'/'+v_file, exist_ok=True)
+    os.makedirs(frames_dir+'/'+v_name, exist_ok=True)
     count = 0
     while(cap.isOpened()):
         frameId = cap.get(1) #current frame number
@@ -81,11 +85,12 @@ def Frame_Extractor(v_file, path='./', ext='.avi', frames_dir='train_1', extract
                 if f_counter%frameRate==0:
                     indicies = np.arange(0,frameRate)
                     np.random.shuffle(indicies)
-                    indicies = np.sort(indicies[0:extract_rate])
+                    indicies = np.sort(indicies[0:extract_rate]) #'{0}frame_'.format(int(count)) + v_name
                     for i in indicies:
-                        filename = frames_dir + '/' + v_file+ '/'+"_frame{0}".format(int(count))+frames_ext;count+=1
+                        filename = frames_dir + '/' + v_name + '/'+  v_name + '_frame{0}'.format(int(count)) + frames_ext;count+=1
                         cv2.imwrite(filename, f_list[int(i)])
                     f_list = []
+                    #print(filename)
                 else:
                     f_list.append(frame)
                 # storing the frames in a new folder named train_1
@@ -93,12 +98,12 @@ def Frame_Extractor(v_file, path='./', ext='.avi', frames_dir='train_1', extract
                 # cv2.imwrite(filename, frame)
             elif extract_rate==1:
                 if (frameId % math.floor(frameRate) == 0):
-                    filename = frames_dir + '/' + v_file+ '/'+"_frame{0}".format(count)+frames_ext;count+=1
+                    filename = frames_dir + '/' + v_name + '/'+  v_name + '_frame{0}'.format(int(count)) + frames_ext;count+=1
                     cv2.imwrite(filename, frame)
         elif type(extract_rate)==str:
             if extract_rate=='all':
                 # storing the frames in a new folder named train_1
-                filename = frames_dir + '/' + v_file+ '/'+  v_file + "_frame{0}".format(count)+frames_ext;count+=1
+                filename = frames_dir + '/' + v_name + '/'+  v_name + '_frame{0}'.format(int(count)) + frames_ext;count+=1
                 cv2.imwrite(filename, frame)
             else:
                 raise ValueError('Invalid Value for argument `extract_rate`, it can be either `all` or an integer value.')
@@ -231,14 +236,15 @@ def Fit_Preprocessing(path, frames_ext):
     return img_list
     
 if __name__=='__main__':    
-    vid_paths = ['./Dataset/Train_temp']
+    vid_paths = ['./Dataset/chute02']
     for vid_path in vid_paths:
         print('\n\nExtracting Frame from the videos, Path: {0}\n'.format(vid_path))
         frames_dir = 'Frames/'+vid_path
-        Vid2Frame(vid_path, frames_dir, ext_vid='.mp4', frames_ext='.jpg', 
+        Vid2Frame(vid_path, frames_dir, ext_vid='.avi', frames_ext='.jpg', 
                   extract_rate=16)
     print('\n-------- Frames are Extracted from All Videos Succesfully! --------\n')  
-        
+    
+
 
     # paths = ['path_to_frames/Train', 'path_to_frames/Test']
     # for path in paths:
