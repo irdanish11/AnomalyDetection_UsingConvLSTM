@@ -12,6 +12,8 @@ from PIL import ImageFont, ImageDraw, Image
 import numpy as np
 import cv2
 import sys
+from BatchGenerator import BatchGenerator, Timer
+import os
 #from tensorflow.keras.models import load_model
 
 def BuildModel(input_shape=(227,227,10,1)):
@@ -35,8 +37,6 @@ def BuildModel(input_shape=(227,227,10,1)):
 
     #Compiling Model
     model = Model(inputs=input, outputs=spatial_dec)
-    model.summary()
-    model.compile(optimizer='adam',loss='mean_squared_error',metrics=['accuracy'])
     return model
 
 def TF_GPUsetup(GB=4):
@@ -187,3 +187,88 @@ def ListCopy(lst):
             new_lst.append(item)        
     return new_lst
 
+def _callback(epoch_loss, global_loss, ckpt_path, model, e_stop, es_log, patience, min_delta):
+    #Implementing early stopping
+    if e_stop:
+        d = global_loss-epoch_loss
+        #print(d, global_loss,epoch_loss)
+        if d<min_delta:
+            es_log += 1
+        else:
+            os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
+            model.save(ckpt_path)
+            print('Loss imporoved, Model saved to checkpoints file!')
+            es_log=0
+            global_loss = epoch_loss
+        if es_log>patience:
+            print('Training Terminated as loss was not improving, Early Stopping count: {0}'.format(patience))
+            return global_loss, es_log, True
+        else:
+            return global_loss, es_log, False
+    else:
+        #Saving checkpoints
+        if epoch_loss<global_loss:
+            os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
+            model.save(ckpt_path)
+            print('Loss imporoved, Model saved to checkpoints file!')
+
+def fit(model, train_frames, epochs, ckpt_path, val_frames=None, batch_size=256, batch_shape=(16, 315, 235, 16, 1), e_stop=False, patience=3, min_delta=0.0):
+    if e_stop:
+        if type(patience)!=int:
+            raise TypeError('Inavlid value given to es_count, provide an integer value.')     
+    TF_GPUsetup(5)
+    time = Timer()
+    global_loss = 10e5
+    es_log=0
+    print('Training Will Start Now')
+    for epoch in range(1, epochs+1):
+        print('\n')
+        epoch_acc = 0
+        epoch_loss = 0
+        total_time = 0
+        bg = BatchGenerator(batch_size, train_frames, batch_shape)
+        total_batches = int(len(train_frames)/batch_size)
+        for i in range(1, total_batches+1): 
+            #print('Gett')
+            X_train = bg.get_nextBatch()
+            #start timer
+            time.start()
+            """Training Model"""
+            metrics = model.train_on_batch(X_train, X_train)
+            #end timer on batch and calculate estimated time on remaining batches
+            time_remain, time_taken = time.get_time_hhmmss(total_batches-i)
+            str1 = 'Epoch {0}/{1}, Batch {2}/{3}, Time Taken By 1 Batch: {4:.2} sec. '.format(epoch, epochs, i, total_batches, time_taken)
+            if type(metrics)==list:
+                batch_loss = metrics[0]; batch_acc = metrics[1]
+                epoch_loss += batch_loss
+                epoch_acc += batch_acc
+                str2 = 'Est Time Remaining: {0}, Loss: {1:.5}, Accuracy: {2:.3}'.format(time_remain, batch_loss, batch_acc)
+            else:
+                batch_loss = metrics
+                str2 = 'Est Time Remaining: {0}, Loss: {1:.5}'.format(time_remain, batch_loss)
+            PrintInline(str1+str2)
+            total_time += time_taken
+        m, s = divmod(total_time, 60)
+        h, m = divmod(m, 60)
+        time_str = "%02d:%02d:%02d" % (h, m, s)
+        if type(metrics)==list:
+            print('\nLoss on epoch: {0:.5}, Accuracy on Epoch: {1:.3} Total time taken by epoch: {2}'.format(epoch_loss/total_batches, epoch_acc/total_batches, time_str))
+        else:
+            print('\nLoss on epoch: {0:.5}, Total time taken by epoch: {1}'.format(epoch_loss/total_batches, time_str))
+        
+        if val_frames:
+            if epoch==1:
+                val_data = bg.frames2array(val_frames, time_dim=batch_shape[3], channel=batch_shape[4])
+            val_metrics = model.evaluate(val_data, val_data)
+            if type(val_metrics)==list:
+                val_loss = val_metrics[0]; val_acc = val_metrics[1]
+                print('Validation Loss: {0:.5}, Validation Accuracy: {1:.3}, Number of Validation Samples: {2}'.format(val_loss, val_acc, len(val_data)))
+            else:
+                val_loss = val_metrics
+                print('Validation Loss: {0:.5}'.format(val_loss))
+            global_loss, es_log, br = _callback(val_loss, global_loss, ckpt_path, model, e_stop, es_log, patience, min_delta)
+        else:
+            global_loss, es_log, br = _callback(epoch_loss, global_loss, ckpt_path, model, e_stop, es_log, patience, min_delta)
+        if br:
+            break
+            

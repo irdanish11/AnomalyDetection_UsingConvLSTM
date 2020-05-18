@@ -5,18 +5,22 @@ Created on Sat May 16 04:27:50 2020
 @author: Danish
 """
 
-from BatchGenerator import BatchGenerator, load_dataset_frames
+from BatchGenerator import load_dataset_frames
+import ModelWrapper as mp
+
+
+model = mp.BuildModel(input_shape=(315, 235, 16, 1)) 
+
 
 frame_dirs = ['./Frames/Dataset/chute02']
-frames_lst = load_dataset_frames(frame_dirs, frames_ext='.jpg', save=True, name='FramesList')    
+train_frames, val_frames = load_dataset_frames(frame_dirs, frames_ext='.jpg', save=True, 
+                                               name='FramesList', val_split=0.004)  
+
+model.summary()
+model.compile(optimizer='adam',loss='mean_squared_error',metrics=['accuracy'])
+mp.fit(model, train_frames, epochs=100, ckpt_path='./checkpoints/Autoencoder.h5', val_frames=val_frames, 
+       batch_size=192, batch_shape=(12, 315, 235, 16, 1), e_stop=True, patience=5, min_delta=0.00001)  
  
-batch_size=256  
-######### Following four lines of code should go inside the epoch loop ######     
-''' Otherwise if you initialize BatchGenerator class out of the epoch it will give btaches
-    for only 1 epoch, because at the last call of 1st epoch variable self.counter will reach 
-    its upper bound, and on 2nd epoch we will not get any batches, so we have initialize the 
-    class on every new epoch.''' 
-bg = BatchGenerator(batch_size, frames_lst, batch_shape=(16, 16, 360, 240, 3))
-batches = []
-for i in range(int(len(frames_lst)/batch_size)):   
-    batches.append(bg.get_nextBatch())
+
+
+    

@@ -172,6 +172,12 @@ def ToJson(obj, name, path='./', json_dir=False):
             json.dump(obj, f)
         f.close()
 
+def rgb2Gray(img):
+    rgb_weights = [0.2989, 0.5870, 0.1140]
+    gray = np.dot(img, rgb_weights)
+    return gray
+    
+
 def ProcessImg(img_name, read_path, write=True, write_path=None, res_shape=(128,128)):
     if write and write_path is None:
         raise TypeError('The value of argument cannot be `None` when, `write` is set to True. Provide a valid path, where processed image should be stored!')
@@ -179,17 +185,18 @@ def ProcessImg(img_name, read_path, write=True, write_path=None, res_shape=(128,
     #img=img_to_array(img)
     #Resize the Image to (227,227)
     img=cv2.resize(img,res_shape)
-    
-    rgb_weights = [0.2989, 0.5870, 0.1140]
-    gray = np.dot(img, rgb_weights)
+    gray = rgb2Gray(img)
     
     if write:
         os.makedirs(write_path, exist_ok=True)
         cv2.imwrite(write_path+'/'+img_name, gray) 
     return gray
 
-def GlobalNormalization(img_list, name=None, path='Train_Data', save_data=True):
-    img_arr = np.array(img_list)
+def GlobalNormalization(img_list, name=None, path='Train_Data', save_data=False):
+    if type(img_list)==list:
+        img_arr = np.array(img_list)
+    elif type(img_list)==np.ndarray:
+        img_arr = img_list
     batch,height,width = img_arr.shape
     #Reshape to (227,227,batch_size)
     img_arr.resize(height,width,batch)
@@ -214,7 +221,7 @@ def Vid2Frame(vid_path, frames_dir, ext_vid='.mp4', frames_ext='.jpg', extract_r
         path = os.path.dirname(vid)+'/'
         v_file = os.path.basename(vid)
         Frame_Extractor(v_file, path=path, ext=ext_vid, frames_dir=frames_dir, extract_rate=extract_rate, 
-                        frames_ext=frames_ext, resize=True, size=(240,360))  
+                        frames_ext=frames_ext, resize=True, size=(235,315))  
         
 def Fit_Preprocessing(path, frames_ext):
     if frames_ext is None:
