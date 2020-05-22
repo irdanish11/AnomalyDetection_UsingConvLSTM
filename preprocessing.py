@@ -12,7 +12,7 @@ import math
 import cv2
 from tqdm import tqdm
 import json
-
+import pickle
 
 def Frame_Extractor(v_file, path='./', ext='.avi', frames_dir='train_1', extract_rate='all', frames_ext='.jpg', resize=False, size=None):
     """
@@ -171,6 +171,11 @@ def ToJson(obj, name, path='./', json_dir=False):
         with open(path+'/'+name, 'w') as f:
             json.dump(obj, f)
         f.close()
+        
+def ToPickle(obj, name, path='./'):
+    with open(path+'/'+name, 'wb') as f:
+        pickle.dump(obj, f)
+    f.close()
 
 def rgb2Gray(img):
     rgb_weights = [0.2989, 0.5870, 0.1140]

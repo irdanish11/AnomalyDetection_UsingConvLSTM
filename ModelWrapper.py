@@ -13,7 +13,9 @@ import numpy as np
 import cv2
 import sys
 from BatchGenerator import BatchGenerator, Timer
+from preprocessing import ToPickle
 import os
+from tqdm import tqdm
 #from tensorflow.keras.models import load_model
 
 def BuildModel(input_shape=(227,227,10,1)):
@@ -35,9 +37,10 @@ def BuildModel(input_shape=(227,227,10,1)):
     spatial_dec = Conv3DTranspose(filters=128,kernel_size=(5,5,1),strides=(2,2,1),padding='valid',activation='tanh')(temporal_dec)
     spatial_dec = Conv3DTranspose(filters=1,kernel_size=(11,11,1),strides=(4,4,1),padding='valid',activation='tanh')(spatial_dec)
 
-    #Compiling Model
+    # Model
     model = Model(inputs=input, outputs=spatial_dec)
-    return model
+    encoder = Model(inputs=input, outputs=temporal_enc)
+    return model, encoder
 
 def TF_GPUsetup(GB=4):
     """
@@ -187,7 +190,7 @@ def ListCopy(lst):
             new_lst.append(item)        
     return new_lst
 
-def _callback(epoch_loss, global_loss, ckpt_path, model, e_stop, es_log, patience, min_delta):
+def _callback(epoch_loss, global_loss, ckpt_path, model, encoder, e_stop, es_log, patience, min_delta):
     #Implementing early stopping
     if e_stop:
         d = global_loss-epoch_loss
@@ -195,8 +198,10 @@ def _callback(epoch_loss, global_loss, ckpt_path, model, e_stop, es_log, patienc
         if d<min_delta:
             es_log += 1
         else:
-            os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
+            path = os.path.dirname(ckpt_path)
+            os.makedirs(path, exist_ok=True)
             model.save(ckpt_path)
+            encoder.save(path+'/encoder.h5')
             print('Loss imporoved, Model saved to checkpoints file!')
             es_log=0
             global_loss = epoch_loss
@@ -208,29 +213,34 @@ def _callback(epoch_loss, global_loss, ckpt_path, model, e_stop, es_log, patienc
     else:
         #Saving checkpoints
         if epoch_loss<global_loss:
-            os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
+            path = os.path.dirname(ckpt_path)
+            os.makedirs(path, exist_ok=True)
             model.save(ckpt_path)
+            encoder.save(path+'/encoder.h5')
             print('Loss imporoved, Model saved to checkpoints file!')
 
-def fit(model, train_frames, epochs, ckpt_path, val_frames=None, batch_size=256, batch_shape=(16, 315, 235, 16, 1), e_stop=False, patience=3, min_delta=0.0):
+def fit(model_lst, train_frames, epochs, ckpt_path, val_frames=None, batch_size=256, batch_shape=(16, 315, 235, 16, 1), e_stop=False, patience=3, min_delta=0.0, init_epoch=1):
+    model=model_lst[0]; encoder=model_lst[1]
     if e_stop:
         if type(patience)!=int:
             raise TypeError('Inavlid value given to es_count, provide an integer value.')     
-    TF_GPUsetup(5)
+    #TF_GPUsetup(5)
     time = Timer()
     global_loss = 10e5
     es_log=0
     print('Training Will Start Now')
-    for epoch in range(1, epochs+1):
+    for epoch in range(init_epoch, epochs+1):
         print('\n')
         epoch_acc = 0
         epoch_loss = 0
         total_time = 0
         bg = BatchGenerator(batch_size, train_frames, batch_shape)
         total_batches = int(len(train_frames)/batch_size)
+        epoch_data = list(range(0,50))
         for i in range(1, total_batches+1): 
+            batch_data = {'Batch':[],'Loss':[], 'Accuracy':[]}
             #print('Gett')
-            X_train = bg.get_nextBatch()
+            X_train = bg.get_nextBatch(i)
             #start timer
             time.start()
             """Training Model"""
@@ -248,6 +258,15 @@ def fit(model, train_frames, epochs, ckpt_path, val_frames=None, batch_size=256,
                 str2 = 'Est Time Remaining: {0}, Loss: {1:.5}'.format(time_remain, batch_loss)
             PrintInline(str1+str2)
             total_time += time_taken
+            batch_data['Batch'].append(i); batch_data['Loss'].append(batch_loss); batch_data['Accuracy'].append(batch_acc);  
+            epoch_data[epoch] = batch_data
+            ToPickle(epoch_data, 'Batch_Data')
+            if i%2000==0:
+                path = os.path.dirname(ckpt_path)
+                f_name = 'Batch_'+os.path.basename(ckpt_path)
+                os.makedirs(path+'/'+f_name, exist_ok=True)
+                model.save(ckpt_path)
+                encoder.save(path+'/batch_encoder.h5')
         m, s = divmod(total_time, 60)
         h, m = divmod(m, 60)
         time_str = "%02d:%02d:%02d" % (h, m, s)
@@ -258,17 +277,23 @@ def fit(model, train_frames, epochs, ckpt_path, val_frames=None, batch_size=256,
         
         if val_frames:
             if epoch==1:
+                print('Reading Validation Data')
                 val_data = bg.frames2array(val_frames, time_dim=batch_shape[3], channel=batch_shape[4])
-            val_metrics = model.evaluate(val_data, val_data)
+            print('Performing Validation')
+            val_metrics = model.evaluate(val_data, val_data, batch_size=4)
             if type(val_metrics)==list:
                 val_loss = val_metrics[0]; val_acc = val_metrics[1]
                 print('Validation Loss: {0:.5}, Validation Accuracy: {1:.3}, Number of Validation Samples: {2}'.format(val_loss, val_acc, len(val_data)))
             else:
                 val_loss = val_metrics
                 print('Validation Loss: {0:.5}'.format(val_loss))
-            global_loss, es_log, br = _callback(val_loss, global_loss, ckpt_path, model, e_stop, es_log, patience, min_delta)
+            global_loss, es_log, br = _callback(val_loss, global_loss, ckpt_path, model, encoder, e_stop, es_log, patience, min_delta)
         else:
-            global_loss, es_log, br = _callback(epoch_loss, global_loss, ckpt_path, model, e_stop, es_log, patience, min_delta)
+            global_loss, es_log, br = _callback(epoch_loss, global_loss, ckpt_path, model, encoder, e_stop, es_log, patience, min_delta)
+        history = {'Train_loss':[], 'Train_acc': [], 'val_loss':[], 'val_acc':[], 'Epoch':[]}
+        history['Train_loss'].append(epoch_loss); history['Train_acc'].append(epoch_acc); history['Epoch'].append(epoch);
+        history['Train_loss'].append(val_loss); history['Train_loss'].append(val_acc);
+        ToPickle(history, name='history')
         if br:
             break
             

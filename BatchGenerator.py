@@ -10,7 +10,7 @@ Dependencies: pip install natsort
 
 import glob
 import natsort
-from preprocessing import ToJson, GlobalNormalization, rgb2Gray
+from preprocessing import ToJson, GlobalNormalization, rgb2Gray, ToPickle
 import cv2
 import numpy as np
 import time
@@ -52,7 +52,9 @@ class BatchGenerator:
         self.frames_lst = frames_lst
         self.batch_shape = batch_shape
         self.counter = 0;
-    def get_nextBatch(self):
+        self.prev_frames = None
+        self.nan = {'BatchNo':[], 'Index':[]}
+    def get_nextBatch(self, batch):
         frames_batch = self.frames_lst[self.counter:self.counter + self.batch_size]
         frames = []
         for f in frames_batch:
@@ -61,18 +63,32 @@ class BatchGenerator:
         frames = np.array(frames)
         #Aplying Global normalization to the batch
         frames = GlobalNormalization(frames)
-        frames = np.reshape(frames, self.batch_shape)
+        if np.isnan(np.sum(frames)):
+            self.nan['BatchNo'].append(batch)
+            self.nan['Index'].append('{0}-{1}'.format(self.counter,self.counter + self.batch_size))
+            ToJson(self.nan, 'NaNLogger.json')
+            frames = self.prev_frames
+        else:
+            frames = np.reshape(frames, self.batch_shape)
+            self.prev_frames = frames
         #incrementing the counter
         self.counter += self.batch_size
         return frames
     def frames2array(self, frame_names, time_dim=16, channel=1):
         frames = []
-        for f in frame_names:
+        for f in tqdm(frame_names):
             gray = rgb2Gray(cv2.imread(f))
             frames.append(gray)
         frames = np.array(frames)
         #Aplying Global normalization to the batch
         frames = GlobalNormalization(frames)
+        i=0
+        for f in tqdm(frames):
+            if np.isnan(np.sum(f)):
+                frames[i] = self.prev_frames[0]
+            else:
+                pass
+            i += 1
         shape = np.shape(frames)
         samples = int(shape[2]/time_dim)
         #Slice the array from third axis, as the shape of array changes after GlobalNormalization to: (width,height,batch_size)
