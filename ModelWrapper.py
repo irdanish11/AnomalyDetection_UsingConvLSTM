@@ -13,7 +13,7 @@ import numpy as np
 import cv2
 import sys
 from BatchGenerator import BatchGenerator, Timer
-from preprocessing import ToPickle
+from preprocessing import ToPickle, ToJson
 import os
 from tqdm import tqdm
 #from tensorflow.keras.models import load_model
@@ -219,7 +219,93 @@ def _callback(epoch_loss, global_loss, ckpt_path, model, encoder, e_stop, es_log
             encoder.save(path+'/encoder.h5')
             print('Loss imporoved, Model saved to checkpoints file!')
 
-def fit(model_lst, train_frames, epochs, ckpt_path, val_frames=None, batch_size=256, batch_shape=(16, 315, 235, 16, 1), e_stop=False, patience=3, min_delta=0.0, init_epoch=1):
+def save_processed_batches(train_frames, batch_size=192, batch_shape=(12, 315, 235, 16, 1), path='./npy_data'):
+    """
+    Preproces the images and save them in compressed numpy format, so that images don't need to be
+    processed at every epoch thus resulting in reducing the training time, but this methid does requires
+    a lot of storage'
+    Parameters
+    ----------
+    train_frames : TYPE
+        DESCRIPTION.
+    val_frames : TYPE
+        DESCRIPTION.
+    batch_size : TYPE, optional
+        DESCRIPTION. The default is 192.
+    batch_shape : TYPE, optional
+        DESCRIPTION. The default is (12, 315, 235, 16, 1).
+    path : TYPE, optional
+        DESCRIPTION. The default is './npy_data'.
+
+    Returns
+    -------
+    None.
+
+    """
+    bg = BatchGenerator(batch_size, train_frames, batch_shape)
+    total_batches = int(len(train_frames)/batch_size)
+    os.makedirs(path+'/'+'train_batches', exist_ok=True)
+    train_batches = {}
+    train_lst = []
+    for i in tqdm(range(1, total_batches+1)): 
+        train_batches['Batch'.format(i)] = [(i-1)*batch_size, i*batch_size]
+        X_train = bg.get_nextBatch(i)
+        X_train = np.array(X_train, dtype=np.float16)
+        name = path+'/'+'train_batches/'+'Batch{0}.npz'.format(i)
+        np.savez_compressed(name, X_train)
+        train_lst.append(name)
+    ToPickle(train_batches, name='train_batches_info.pickle')
+    ToJson(train_lst, name='train_lst.json')
+    return train_lst
+
+
+def fit(model_lst, train_frames, epochs, ckpt_path, dp_type='pre', val_frames=None, batch_size=192, batch_shape=(12, 315, 235, 16, 1), e_stop=False, patience=3, min_delta=0.0, init_epoch=1, batch_n=1):
+    """
+    Parameters
+    ----------
+    model_lst : TYPE
+        DESCRIPTION.
+    train_frames : TYPE
+        DESCRIPTION.
+    epochs : TYPE
+        DESCRIPTION.
+    ckpt_path : TYPE
+        DESCRIPTION.
+    dp_type : string type
+        Specifies the data preprocessing to be used, either `pre` or `post`. If value is `pre`, then you
+        have to provide a list of paths to the preprocessed numpy arrays to argument `train_frames` which 
+        are saved to the disk using save_processed_batches() method this will save train time, If you want 
+        to preprocess images on every epoch then provide `post` to the dp_type and provide a list of paths
+        to each and every image to argument `train_frames`.
+    val_frames : TYPE, optional
+        DESCRIPTION. The default is None.
+    batch_size : TYPE, optional
+        DESCRIPTION. The default is 192.
+    batch_shape : TYPE, optional
+        DESCRIPTION. The default is (12, 315, 235, 16, 1).
+    e_stop : TYPE, optional
+        DESCRIPTION. The default is False.
+    patience : TYPE, optional
+        DESCRIPTION. The default is 3.
+    min_delta : TYPE, optional
+        DESCRIPTION. The default is 0.0.
+    init_epoch : TYPE, optional
+        DESCRIPTION. Use to resume the training. In case of resuming you have to provide the model that
+        was saved by the previous epoch. The number should be equal to the number of times previous model
+        that you are giving now has been trained. The default is 1.
+    batch_n : TYPE, optional
+        DESCRIPTION. The number of batches your previous model was trained for the last epoch, if you are
+        not sure just don't set this parameter or just provide 1. The default is 1.
+
+    Raises
+    ------
+    TypeError
+
+    Returns
+    -------
+    None.
+
+    """
     model=model_lst[0]; encoder=model_lst[1]
     if e_stop:
         if type(patience)!=int:
@@ -234,13 +320,25 @@ def fit(model_lst, train_frames, epochs, ckpt_path, val_frames=None, batch_size=
         epoch_acc = 0
         epoch_loss = 0
         total_time = 0
-        bg = BatchGenerator(batch_size, train_frames, batch_shape)
-        total_batches = int(len(train_frames)/batch_size)
+        if dp_type=='post':
+            bg = BatchGenerator(batch_size, train_frames, batch_shape)
+            total_batches = int(len(train_frames)/batch_size)
+        elif dp_type=='pre':
+            total_batches = len(train_frames)
         epoch_data = list(range(0,50))
-        for i in range(1, total_batches+1): 
+        if epoch==init_epoch:
+            batch=batch_n
+            print('Previous model found, training will resume now from: Epoch: {0}, and Batch: {1}'.format(epoch, batch))
+        else:
+            batch=1
+        for i in range(batch, total_batches+1): 
             batch_data = {'Batch':[],'Loss':[], 'Accuracy':[]}
             #print('Gett')
-            X_train = bg.get_nextBatch(i)
+            if dp_type=='post':
+                X_train = bg.get_nextBatch(i)
+            elif dp_type=='pre':
+                npzfile = np.load(train_frames[i])
+                X_train = npzfile[npzfile.files[0]]
             #start timer
             time.start()
             """Training Model"""

@@ -1,2 +1,10 @@
 
 *.h5
+*.jpg
+*.avi
+*.npz
+*.pyc
+*.pyc
+*.pyc
+__pycache__/BatchGenerator.cpython-37.pyc
+__pycache__/ModelWrapper.cpython-37.pyc

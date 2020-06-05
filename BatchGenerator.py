@@ -24,7 +24,7 @@ def load_dataset_frames(frame_dirs, frames_ext='.jpg', save=True, name='FramesLi
     for dirc in frame_dirs:
          sub_dir = glob.glob(dirc+'/*')
          directories.extend(sub_dir)
-    print('Reading Frame names from directories!')
+    print('\nReading Frame names from directories!\n')
     frames_lst = []
     for dirc in tqdm(directories):
         frames = glob.glob(dirc+'/*{0}'.format(frames_ext))
