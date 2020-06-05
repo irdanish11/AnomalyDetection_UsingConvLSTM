@@ -16,7 +16,7 @@ from BatchGenerator import BatchGenerator, Timer
 from preprocessing import ToPickle, ToJson
 import os
 from tqdm import tqdm
-#from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model
 
 def BuildModel(input_shape=(227,227,10,1)):
     if len(input_shape) != 4 or type(input_shape) != tuple:
@@ -41,6 +41,11 @@ def BuildModel(input_shape=(227,227,10,1)):
     model = Model(inputs=input, outputs=spatial_dec)
     encoder = Model(inputs=input, outputs=temporal_enc)
     return model, encoder
+
+def load_model_weights(path, model_path, encoder_path):
+    model = load_model(path+'/'+model_path)
+    encoder = load_model(path+'/'+encoder_path)
+    return [model, encoder]
 
 def TF_GPUsetup(GB=4):
     """
