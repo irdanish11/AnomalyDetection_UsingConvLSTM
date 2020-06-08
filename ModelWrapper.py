@@ -332,11 +332,12 @@ def fit(model_lst, train_frames, epochs, ckpt_path, dp_type='pre', val_frames=No
             total_batches = len(train_frames)
         epoch_data = list(range(0,50))
         if epoch==init_epoch:
+            resume = True
             batch=batch_n
             print('Previous model found, training will resume now from: Epoch: {0}, and Batch: {1}'.format(epoch, batch))
         else:
             batch=1
-        for i in range(batch, total_batches+1): 
+        for i in range(batch, total_batches): 
             batch_data = {'Batch':[],'Loss':[], 'Accuracy':[]}
             #print('Gett')
             if dp_type=='post':
@@ -379,7 +380,8 @@ def fit(model_lst, train_frames, epochs, ckpt_path, dp_type='pre', val_frames=No
             print('\nLoss on epoch: {0:.5}, Total time taken by epoch: {1}'.format(epoch_loss/total_batches, time_str))
         
         if val_frames:
-            if epoch==1:
+            if epoch==1 or resume:
+                bg = BatchGenerator(batch_size, train_frames, batch_shape)
                 print('Reading Validation Data')
                 val_data = bg.frames2array(val_frames, time_dim=batch_shape[3], channel=batch_shape[4])
             print('Performing Validation')

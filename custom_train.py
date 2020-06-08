@@ -21,6 +21,8 @@ model_lst = [model, encoder]
 frame_dirs = ['./Frames/Dataset/chute02']
 train_frames, val_frames = load_dataset_frames(frame_dirs, frames_ext='.jpg', save=True, 
                                                name='FramesList', val_split=0.1)#0.004  
+del train_frames[1722048:1722432]
+
 #Preprocessing data to save time
 train_frames = mp.save_processed_batches(train_frames, batch_size=192, batch_shape=(12, 315, 235, 16, 1), 
                           path='./npy_data')
