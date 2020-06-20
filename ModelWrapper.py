@@ -98,48 +98,6 @@ def GetTrainData(name, re_shape=(-1,227,227,10)):
     X_train = np.load(name)
     return PrepareData(X_train, re_shape)
 
-def OverlayText2Img(img, text):
-    # Convert to PIL Image
-    cv2_im_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    pil_im = Image.fromarray(cv2_im_rgb)
-    draw = ImageDraw.Draw(pil_im)
-    
-    # Choose a font
-    font = ImageFont.truetype("arial.ttf", 40)
-    
-    # Draw the text
-    draw.text((0, 0), text, font=font)
-    
-    # Save the image
-    im_pros = cv2.cvtColor(np.array(pil_im), cv2.COLOR_RGB2BGR)
-    return im_pros
-
-def ShowVideo(cap, v_frame, text):
-    """
-    Parameters
-    ----------
-    cap : Object
-        Object to the cv2.VideoCapture() class.
-    v_frame : TYPE
-        DESCRIPTION.
-    text : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    None.
-
-    """
-    v_frame = OverlayText2Img(v_frame, text)
-    #cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-    cv2.imshow('Real Time Anomaly Detection - Github.com/irdanish11',v_frame)
-    # Press Q on keyboard to  exit
-    if cv2.waitKey(25) & 0xFF == ord('q'):
-        if cap is not None:
-            cap.release()
-        cv2.destroyAllWindows()
-        raise KeyboardInterrupt('Real Time Anomoly Detection Stopped due to Keyboard Interrupt!') 
-            
 def PrintInline(string):
     sys.stdout.write('\r'+string)
     sys.stdout.flush() 
@@ -152,12 +110,6 @@ def ImgProcess(frame, shape=(227,227)):
     gray=np.clip(gray,0,1)
     return gray
 
-def Img_LstArr(img_lst, re_shape=(227, 227, 10)):
-    img_arr=np.array(img_lst)
-    img_arr.resize(re_shape)
-    img_arr=np.expand_dims(img_arr,axis=0)
-    img_arr=np.expand_dims(img_arr,axis=4)
-    return img_arr
 
 def MSE(x1,x2):
     """
@@ -187,13 +139,6 @@ def MSE(x1,x2):
     
     return mean_dist
 
-def ListCopy(lst):
-    new_lst = []
-    for item_lst in lst:
-        for item in item_lst:
-            #ten_lst = []
-            new_lst.append(item)        
-    return new_lst
 
 def _callback(epoch_loss, global_loss, ckpt_path, model, encoder, e_stop, es_log, patience, min_delta):
     #Implementing early stopping
